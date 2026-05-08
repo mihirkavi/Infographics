@@ -1,0 +1,33 @@
+{
+  "name": "infographics",
+  "version": "1.0.0",
+  "description": "Infographics — Pulse Markets real-time dashboard (Next.js)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "private": true,
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.14.0",
+    "next": "^16.2.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "recharts": "^3.8.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.6",
+    "typescript": "^6.0.3"
+  }
+}
