@@ -56,10 +56,12 @@ export default function HomePage() {
 
       try {
         const response = await fetch(`/api/prices?${queryString}`, { cache: "no-store" });
-        const json = (await response.json()) as PriceSeries | { details?: string };
+        const json = (await response.json()) as PriceSeries | { details?: string | string[]; error?: string };
 
         if (!response.ok) {
-          throw new Error((json as { details?: string }).details ?? "Failed to fetch market data");
+          const body = json as { details?: string | string[]; error?: string };
+          const detail = Array.isArray(body.details) ? body.details.join("; ") : body.details;
+          throw new Error(detail ?? body.error ?? "Failed to fetch market data");
         }
 
         if (!isCancelled) {

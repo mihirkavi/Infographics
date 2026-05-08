@@ -1,6 +1,7 @@
 "use client";
 
 import { Activity, Clock3, TrendingDown, TrendingUp } from "lucide-react";
+import { useId } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import type { PriceSeries } from "@/types/market";
@@ -19,9 +20,25 @@ function formatTooltipTimestamp(timestamp: number): string {
   return new Date(timestamp).toLocaleString();
 }
 
+function formatYAxisTick(value: number): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return "";
+  }
+  if (Math.abs(n) >= 1000) {
+    return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+  if (Math.abs(n) >= 1) {
+    return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  }
+  return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
 export function PriceChart({ series, loading, error }: PriceChartProps) {
-  const first = series?.points[0]?.price ?? 0;
-  const last = series?.points[series.points.length - 1]?.price ?? 0;
+  const gradientId = useId().replace(/:/g, "");
+  const points = series?.points ?? [];
+  const first = points[0]?.price ?? 0;
+  const last = points[points.length - 1]?.price ?? 0;
   const delta = last - first;
   const deltaPct = first ? (delta / first) * 100 : 0;
   const positive = delta >= 0;
@@ -63,9 +80,9 @@ export function PriceChart({ series, loading, error }: PriceChartProps) {
       {series && (
         <div className="chart-wrap">
           <ResponsiveContainer width="100%" height={350}>
-            <AreaChart data={series.points}>
+            <AreaChart data={points}>
               <defs>
-                <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#7c92ff" stopOpacity={0.45} />
                   <stop offset="95%" stopColor="#7c92ff" stopOpacity={0.05} />
                 </linearGradient>
@@ -80,15 +97,15 @@ export function PriceChart({ series, loading, error }: PriceChartProps) {
               />
               <YAxis
                 stroke="#9ba5d3"
-                domain={["dataMin - 2", "dataMax + 2"]}
-                tickFormatter={(value) => Number(value).toFixed(2)}
+                domain={["auto", "auto"]}
+                tickFormatter={formatYAxisTick}
               />
               <Tooltip
                 contentStyle={{ background: "#121833", border: "1px solid #313963", borderRadius: "12px" }}
                 labelFormatter={(value) => formatTooltipTimestamp(Number(value))}
                 formatter={(value) => [`$${Number(value).toFixed(6)}`, "Price"]}
               />
-              <Area type="monotone" dataKey="price" stroke="#9babff" strokeWidth={2} fillOpacity={1} fill="url(#priceFill)" />
+              <Area type="monotone" dataKey="price" stroke="#9babff" strokeWidth={2} fillOpacity={1} fill={`url(#${gradientId})`} />
             </AreaChart>
           </ResponsiveContainer>
         </div>

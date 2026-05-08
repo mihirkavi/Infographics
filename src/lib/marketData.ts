@@ -1,32 +1,43 @@
-import { z } from "zod";
-
 import type { AssetType, PricePoint, PriceQuery, PriceSeries, TimeRange } from "@/types/market";
 
-const RANGE_CONFIG: Record<TimeRange, { points: number; interval: string; msStep: number }> = {
-  "1m": { points: 60, interval: "1min", msStep: 60_000 },
-  "5m": { points: 60, interval: "5min", msStep: 300_000 },
-  "15m": { points: 60, interval: "15min", msStep: 900_000 },
-  "1h": { points: 72, interval: "1h", msStep: 3_600_000 },
-  "1d": { points: 90, interval: "1day", msStep: 86_400_000 }
+const RANGE_CONFIG: Record<TimeRange, { points: number; msStep: number }> = {
+  "1m": { points: 60, msStep: 60_000 },
+  "5m": { points: 60, msStep: 300_000 },
+  "15m": { points: 60, msStep: 900_000 },
+  "1h": { points: 72, msStep: 3_600_000 },
+  "1d": { points: 90, msStep: 86_400_000 }
 };
 
-const valuesSchema = z.object({
-  datetime: z.string(),
-  close: z.string()
-});
+/** Yahoo Finance chart API (v8) query params — public HTTP endpoint used by many OSS tools. */
+const YAHOO_CHART_QUERY: Record<TimeRange, { interval: string; range: string }> = {
+  "1m": { interval: "1m", range: "1d" },
+  "5m": { interval: "5m", range: "5d" },
+  "15m": { interval: "15m", range: "1mo" },
+  "1h": { interval: "1h", range: "3mo" },
+  "1d": { interval: "1d", range: "2y" }
+};
 
-const twelveDataSchema = z.object({
-  status: z.string().optional(),
-  values: z.array(valuesSchema).optional()
-});
+const BINANCE_INTERVAL: Record<TimeRange, string> = {
+  "1m": "1m",
+  "5m": "5m",
+  "15m": "15m",
+  "1h": "1h",
+  "1d": "1d"
+};
+
+const YAHOO_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (compatible; Infographics/1.0; +https://github.com/mihirkavi/Infographics) AppleWebKit/537.36",
+  Accept: "application/json,text/plain,*/*"
+} as const;
 
 type Provider = (query: PriceQuery) => Promise<PriceSeries>;
 
 const providerByAsset: Record<AssetType, Provider> = {
-  stock: fetchFromTwelveDataOrDemo,
-  forex: fetchFromTwelveDataOrDemo,
-  commodity: fetchFromTwelveDataOrDemo,
-  crypto: fetchCryptoFromBinanceOrTwelveData
+  stock: fetchFromYahooChart,
+  forex: fetchFromYahooChart,
+  commodity: fetchFromYahooChart,
+  crypto: fetchCryptoFromBinanceOrYahoo
 };
 
 export async function getPriceSeries(query: PriceQuery): Promise<PriceSeries> {
@@ -37,62 +48,130 @@ export async function getPriceSeries(query: PriceQuery): Promise<PriceSeries> {
   return provider(query);
 }
 
-async function fetchFromTwelveDataOrDemo(query: PriceQuery): Promise<PriceSeries> {
-  if (!process.env.TWELVE_DATA_API_KEY) {
-    return buildDemoSeries(query, "demo-simulated");
+function resolveYahooSymbol(query: PriceQuery): string {
+  const raw = query.symbol.trim();
+
+  if (query.assetType === "forex") {
+    const pair = raw.replace(/\s/g, "").replace(/\//g, "").toUpperCase();
+    if (pair.length < 6) {
+      throw new Error(`Invalid forex pair: ${query.symbol}`);
+    }
+    return `${pair}=X`;
   }
 
+  if (query.assetType === "commodity") {
+    const key = raw.replace(/\s/g, "").toUpperCase();
+    if (key === "XAU/USD" || key === "XAUUSD") {
+      return "GC=F";
+    }
+    if (key === "XAG/USD" || key === "XAGUSD") {
+      return "SI=F";
+    }
+    if (key === "WTI" || key === "CL=F" || key === "CRUDE") {
+      return "CL=F";
+    }
+    if (raw.includes("=")) {
+      return raw;
+    }
+    throw new Error(`Unsupported commodity symbol: ${query.symbol}. Try XAU/USD, XAG/USD, or WTI.`);
+  }
+
+  return raw.toUpperCase();
+}
+
+function toYahooCryptoPair(symbol: string): string {
+  const normalized = symbol.trim().replace(/\s/g, "").replace(/\//g, "-").toUpperCase();
+  if (!normalized.includes("-") && normalized.length >= 6) {
+    const base = normalized.slice(0, -3);
+    const quote = normalized.slice(-3);
+    return `${base}-${quote}`;
+  }
+  return normalized;
+}
+
+interface YahooChartPayload {
+  chart?: {
+    error?: { description?: string };
+    result?: Array<{
+      timestamp?: number[];
+      indicators?: { quote?: Array<{ close?: Array<number | null> }> };
+    }>;
+  };
+}
+
+async function fetchFromYahooChart(query: PriceQuery): Promise<PriceSeries> {
+  const yahooSymbol = resolveYahooSymbol(query);
   const config = RANGE_CONFIG[query.range];
-  const url = new URL("https://api.twelvedata.com/time_series");
-  url.searchParams.set("symbol", query.symbol);
-  url.searchParams.set("interval", config.interval);
-  url.searchParams.set("outputsize", String(config.points));
-  url.searchParams.set("apikey", process.env.TWELVE_DATA_API_KEY);
+  const { interval, range } = YAHOO_CHART_QUERY[query.range];
 
-  const response = await fetch(url.toString(), { cache: "no-store" });
+  const url = new URL(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}`
+  );
+  url.searchParams.set("interval", interval);
+  url.searchParams.set("range", range);
+  url.searchParams.set("includePrePost", "false");
+
+  const response = await fetch(url.toString(), { cache: "no-store", headers: YAHOO_HEADERS });
   if (!response.ok) {
-    throw new Error(`Failed data fetch (${response.status})`);
+    throw new Error(`Yahoo Finance HTTP ${response.status} for ${yahooSymbol}`);
   }
 
-  const json = await response.json();
-  const parsed = twelveDataSchema.parse(json);
-
-  if (parsed.status === "error" || !parsed.values?.length) {
-    throw new Error("Upstream provider returned no values");
+  const payload = (await response.json()) as YahooChartPayload;
+  const err = payload.chart?.error;
+  if (err?.description) {
+    throw new Error(`Yahoo Finance: ${err.description}`);
   }
 
-  const points = parsed.values
-    .map((entry): PricePoint | null => {
-      const date = new Date(entry.datetime);
-      const price = Number(entry.close);
-      if (Number.isNaN(date.valueOf()) || Number.isNaN(price)) {
-        return null;
-      }
-      return { timestamp: date.valueOf(), price };
-    })
-    .filter((point): point is PricePoint => point !== null)
-    .reverse();
+  const result = payload.chart?.result?.[0];
+  const timestamps = result?.timestamp;
+  const closes = result?.indicators?.quote?.[0]?.close;
+
+  if (!timestamps?.length || !closes?.length || timestamps.length !== closes.length) {
+    throw new Error(`No Yahoo Finance chart rows for ${yahooSymbol}`);
+  }
+
+  const points: PricePoint[] = [];
+  for (let i = 0; i < timestamps.length; i += 1) {
+    const close = closes[i];
+    if (close == null || Number.isNaN(close)) {
+      continue;
+    }
+    points.push({ timestamp: timestamps[i] * 1000, price: close });
+  }
+
+  const trimmed = points.slice(-config.points);
+
+  if (!trimmed.length) {
+    throw new Error(`No usable Yahoo Finance prices for ${yahooSymbol}`);
+  }
 
   return {
     symbol: query.symbol,
     assetType: query.assetType,
-    points,
+    points: trimmed,
     lastUpdated: Date.now(),
-    source: "twelvedata"
+    source: "yahoo-chart-v8"
   };
 }
 
-async function fetchCryptoFromBinanceOrTwelveData(query: PriceQuery): Promise<PriceSeries> {
-  // Binance provides free, high-frequency crypto candles for popular USD pairs.
+async function fetchCryptoFromBinanceOrYahoo(query: PriceQuery): Promise<PriceSeries> {
   const binanceSymbol = toBinanceSymbol(query.symbol);
   if (binanceSymbol) {
     try {
       return await fetchFromBinance(query, binanceSymbol);
     } catch {
-      // Fall back to TwelveData/demo for unsupported pairs or temporary failures.
+      // Fall through to Yahoo (e.g. pair not on Binance).
     }
   }
-  return fetchFromTwelveDataOrDemo(query);
+
+  const yahooPair = toYahooCryptoPair(query.symbol);
+  const yahooSeries = await fetchFromYahooChart({ ...query, symbol: yahooPair, assetType: "stock" });
+  return {
+    ...yahooSeries,
+    symbol: query.symbol,
+    assetType: "crypto",
+    source: "yahoo-chart-v8"
+  };
 }
 
 function toBinanceSymbol(symbol: string): string | null {
@@ -102,7 +181,7 @@ function toBinanceSymbol(symbol: string): string | null {
   }
 
   if (clean.endsWith("USDT") || clean.endsWith("USD")) {
-    return clean.replace("USD", "USDT");
+    return clean.replace(/USD$/, "USDT");
   }
 
   if (clean.length <= 6) {
@@ -114,17 +193,10 @@ function toBinanceSymbol(symbol: string): string | null {
 
 async function fetchFromBinance(query: PriceQuery, symbol: string): Promise<PriceSeries> {
   const config = RANGE_CONFIG[query.range];
-  const intervalMap: Record<TimeRange, string> = {
-    "1m": "1m",
-    "5m": "5m",
-    "15m": "15m",
-    "1h": "1h",
-    "1d": "1d"
-  };
 
   const url = new URL("https://api.binance.com/api/v3/klines");
   url.searchParams.set("symbol", symbol);
-  url.searchParams.set("interval", intervalMap[query.range]);
+  url.searchParams.set("interval", BINANCE_INTERVAL[query.range]);
   url.searchParams.set("limit", String(Math.min(config.points, 1000)));
 
   const response = await fetch(url.toString(), { cache: "no-store" });
@@ -157,29 +229,5 @@ async function fetchFromBinance(query: PriceQuery, symbol: string): Promise<Pric
     points,
     lastUpdated: Date.now(),
     source: "binance"
-  };
-}
-
-function buildDemoSeries(query: PriceQuery, source: string): PriceSeries {
-  const config = RANGE_CONFIG[query.range];
-  const now = Date.now();
-  const points: PricePoint[] = [];
-  const seedBase = Array.from(query.symbol).reduce((total, char) => total + char.charCodeAt(0), 0);
-  let current = Math.max(10, seedBase % 300) + 50;
-
-  for (let i = config.points - 1; i >= 0; i -= 1) {
-    const timestamp = now - i * config.msStep;
-    const drift = Math.sin((timestamp / config.msStep) * 0.35 + seedBase) * 0.7;
-    const noise = (Math.sin(i * 1.3 + seedBase) + Math.cos(i * 0.8 + seedBase)) * 0.18;
-    current = Math.max(1, current + drift + noise);
-    points.push({ timestamp, price: Number(current.toFixed(4)) });
-  }
-
-  return {
-    symbol: query.symbol,
-    assetType: query.assetType,
-    points,
-    lastUpdated: now,
-    source
   };
 }
