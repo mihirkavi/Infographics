@@ -52,8 +52,14 @@ git remote add origin https://github.com/mihirkavi/Infographics.git
 git push -u origin main
 ```
 
-## Symbol notes
+## Search behavior
 
-- **Forex** uses Yahoo currency tickers, e.g. `EUR/USD` → `EURUSD=X`.
-- **Commodities** map to common Yahoo futures symbols: gold `GC=F`, silver `SI=F`, WTI oil `CL=F`.
-- **Crypto** uses Binance klines when the pair maps to a `*USDT` symbol; otherwise Yahoo pairs like `BTC-USD`.
+- **No manual alias table**: results come from **Yahoo Finance search** (several query variants merged) and **CoinGecko** for crypto names.
+- Type a **name or ticker** Yahoo knows (e.g. `Apple`, `Invesco agriculture ETF`, `EURUSD=X`). Plain English only charts when Yahoo returns a matching **listed** instrument.
+- **Retail prices** (grocery MSRP, etc.) are not exposed by market data APIs—only **tradeable** symbols get live charts.
+
+## Symbol notes (charts)
+
+- **Forex** symbols often look like `EURUSD=X` on Yahoo.
+- **Futures** use Yahoo suffix `=F`; **crypto** pairs often `COIN-USD`.
+- **Crypto** chart uses Binance when the pair maps to `*USDT`; otherwise Yahoo `*-USD` style data.

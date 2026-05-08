@@ -1,8 +1,6 @@
 import type { AssetType } from "@/types/market";
 import type { SearchHit } from "@/types/search";
 
-import { resolveAlias } from "@/lib/searchAliases";
-
 const YAHOO_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (compatible; Infographics/1.0; +https://github.com/mihirkavi/Infographics) AppleWebKit/537.36",
@@ -64,7 +62,7 @@ function yahooQuoteToHit(q: YahooSearchQuote): SearchHit | null {
 async function searchYahoo(query: string): Promise<SearchHit[]> {
   const url = new URL("https://query1.finance.yahoo.com/v1/finance/search");
   url.searchParams.set("q", query);
-  url.searchParams.set("quotesCount", "18");
+  url.searchParams.set("quotesCount", "28");
   url.searchParams.set("newsCount", "0");
   url.searchParams.set("listsCount", "0");
 
@@ -83,6 +81,21 @@ async function searchYahoo(query: string): Promise<SearchHit[]> {
   return hits;
 }
 
+/** Multiple Yahoo queries in parallel — no hardcoded product→symbol map; Yahoo resolves names to instruments. */
+async function searchYahooBroad(normalizedQuery: string): Promise<SearchHit[]> {
+  const q = normalizedQuery.trim();
+  if (q.length < 1) {
+    return [];
+  }
+
+  const variants = Array.from(
+    new Set([q, `${q} ETF`, `${q} stock`, `${q} futures`, `${q} fund`, `${q} ADR`])
+  ).filter((v) => v.length <= 120);
+
+  const batches = await Promise.all(variants.map((variant) => searchYahoo(variant)));
+  return batches.flat();
+}
+
 function coingeckoToHit(coin: CoinGeckoCoin): SearchHit {
   const sym = coin.symbol.toUpperCase();
   return {
@@ -90,7 +103,7 @@ function coingeckoToHit(coin: CoinGeckoCoin): SearchHit {
     name: `${coin.name} (${sym})`,
     assetType: "crypto",
     kind: "CRYPTOCURRENCY",
-    footnote: "Crypto spot chart via exchange/Yahoo pair—CoinGecko match."
+    footnote: "CoinGecko match → USD pair chart."
   };
 }
 
@@ -107,7 +120,54 @@ async function searchCoinGecko(query: string): Promise<SearchHit[]> {
   }
   const payload = (await response.json()) as CoinGeckoSearchPayload;
   const coins = payload.coins ?? [];
-  return coins.slice(0, 8).map(coingeckoToHit);
+  return coins.slice(0, 12).map(coingeckoToHit);
+}
+
+/**
+ * Only accept explicit symbols (not English words): futures/forex suffixes, indices, FX/crypto pairs,
+ * international tickers, or $BRK style — avoids treating "milk" as a ticker.
+ */
+function directSymbolHit(raw: string): SearchHit | null {
+  const trimmed = raw.trim();
+  const hasDollar = trimmed.startsWith("$");
+  const core = hasDollar ? trimmed.slice(1).trim() : trimmed;
+  if (!core.length || core.includes(" ")) {
+    return null;
+  }
+  if (!/^[\^]?[A-Za-z0-9=\.\-]+$/.test(core)) {
+    return null;
+  }
+
+  const upper = core.toUpperCase();
+
+  const structuredSymbol =
+    upper.includes("=") ||
+    core.includes("^") ||
+    /-[A-Z]{3,5}$/.test(upper) ||
+    /\.[A-Z]{1,3}$/.test(upper);
+
+  const shortUpperTicker = /^[A-Z]{1,5}$/.test(upper) && hasDollar;
+
+  if (!structuredSymbol && !shortUpperTicker) {
+    return null;
+  }
+
+  let assetType: AssetType = "stock";
+  if (/=X$/.test(upper)) {
+    assetType = "forex";
+  } else if (/=F$/.test(upper)) {
+    assetType = "commodity";
+  } else if (/-USD$/.test(upper) || /-USDT$/.test(upper)) {
+    assetType = "crypto";
+  }
+
+  return {
+    symbol: upper,
+    name: `${upper} (symbol)`,
+    assetType,
+    kind: "DIRECT",
+    footnote: "Parsed as a Yahoo Finance symbol—verify it lists on an exchange."
+  };
 }
 
 function dedupeHits(hits: SearchHit[]): SearchHit[] {
@@ -124,26 +184,29 @@ function dedupeHits(hits: SearchHit[]): SearchHit[] {
   return out;
 }
 
+/** Prefer Yahoo instruments first, then crypto, then explicit symbol. */
+function mergeSearchResults(yahoo: SearchHit[], gecko: SearchHit[], direct: SearchHit | null): SearchHit[] {
+  const ordered: SearchHit[] = [...yahoo, ...gecko];
+  if (direct) {
+    const dup = ordered.some(
+      (h) => h.symbol.toUpperCase() === direct.symbol.toUpperCase() && h.assetType === direct.assetType
+    );
+    if (!dup) {
+      ordered.unshift(direct);
+    }
+  }
+  return dedupeHits(ordered);
+}
+
 export async function unifiedSearch(rawQuery: string): Promise<SearchHit[]> {
   const query = rawQuery.trim();
   if (query.length < 1) {
     return [];
   }
 
-  const alias = resolveAlias(query);
-  const aliasHits: SearchHit[] = alias
-    ? [
-        {
-          symbol: alias.tradeSymbol,
-          name: alias.name,
-          assetType: alias.assetType,
-          kind: "ALIAS",
-          footnote: alias.footnote
-        }
-      ]
-    : [];
+  const direct = directSymbolHit(query);
 
-  const [yahooHits, geckoHits] = await Promise.all([searchYahoo(query), searchCoinGecko(query)]);
+  const [yahooBroad, geckoHits] = await Promise.all([searchYahooBroad(query), searchCoinGecko(query)]);
 
-  return dedupeHits([...aliasHits, ...yahooHits, ...geckoHits]);
+  return mergeSearchResults(yahooBroad, geckoHits, direct);
 }

@@ -141,8 +141,9 @@ export function MarketSearch({ onSelect }: MarketSearchProps) {
         </ul>
       ) : null}
       <p className="market-search-hint">
-        Real quotes from Yahoo Finance &amp; Binance. Consumer searches map to the closest liquid market (equity,
-        future, or pair)—not retail shelf prices.
+        Search uses Yahoo Finance&apos;s symbol lookup (plus CoinGecko for crypto). Type a company, fund, or symbol
+        (e.g. <code>DELL</code>, <code>DBA</code>, <code>EURUSD=X</code>, <code>$AAPL</code>). Retail shelf prices for
+        random groceries are not available from market APIs—only tradeable instruments chart here.
       </p>
     </div>
   );
