@@ -1,25 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { AssetSelector } from "@/components/AssetSelector";
+import { MarketSearch } from "@/components/MarketSearch";
 import { PriceChart } from "@/components/PriceChart";
-import type { AssetOption, PriceSeries, TimeRange } from "@/types/market";
-
-const ASSETS: AssetOption[] = [
-  { symbol: "AAPL", label: "Apple Inc.", assetType: "stock" },
-  { symbol: "MSFT", label: "Microsoft Corp.", assetType: "stock" },
-  { symbol: "TSLA", label: "Tesla Inc.", assetType: "stock" },
-  { symbol: "EUR/USD", label: "Euro / US Dollar", assetType: "forex" },
-  { symbol: "USD/JPY", label: "US Dollar / Japanese Yen", assetType: "forex" },
-  { symbol: "GBP/USD", label: "British Pound / US Dollar", assetType: "forex" },
-  { symbol: "BTC/USD", label: "Bitcoin", assetType: "crypto" },
-  { symbol: "ETH/USD", label: "Ethereum", assetType: "crypto" },
-  { symbol: "SOL/USD", label: "Solana", assetType: "crypto" },
-  { symbol: "XAU/USD", label: "Gold", assetType: "commodity" },
-  { symbol: "XAG/USD", label: "Silver", assetType: "commodity" },
-  { symbol: "WTI", label: "Crude Oil (WTI)", assetType: "commodity" }
-];
+import { ThemeToggle } from "@/components/ThemeToggle";
+import type { PriceSeries, TimeRange } from "@/types/market";
+import type { SearchHit } from "@/types/search";
 
 const REFRESH_MS: Record<TimeRange, number> = {
   "1m": 4_000,
@@ -29,28 +16,54 @@ const REFRESH_MS: Record<TimeRange, number> = {
   "1d": 20_000
 };
 
+interface Selection {
+  symbol: string;
+  assetType: SearchHit["assetType"];
+  displayName: string;
+  footnote?: string;
+}
+
 export default function HomePage() {
-  const [selectedAsset, setSelectedAsset] = useState<AssetOption>(ASSETS[0]);
+  const [selection, setSelection] = useState<Selection | null>(null);
   const [range, setRange] = useState<TimeRange>("1h");
   const [series, setSeries] = useState<PriceSeries | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const instrumentRef = useRef<string>("");
 
   const queryString = useMemo(() => {
+    if (!selection) {
+      return "";
+    }
     const params = new URLSearchParams({
-      symbol: selectedAsset.symbol,
-      assetType: selectedAsset.assetType,
-      range
+      symbol: selection.symbol,
+      assetType: selection.assetType,
+      range,
+      displayName: selection.displayName
     });
+    if (selection.footnote) {
+      params.set("footnote", selection.footnote);
+    }
     return params.toString();
-  }, [range, selectedAsset.assetType, selectedAsset.symbol]);
+  }, [range, selection]);
 
   useEffect(() => {
-    let isCancelled = false;
+    if (!selection || !queryString) {
+      return;
+    }
 
-    async function fetchSeries() {
-      if (!isCancelled) {
-        setLoading(true);
+    const instrumentKey = `${selection.symbol}|${selection.assetType}`;
+    const instrumentChanged = instrumentKey !== instrumentRef.current;
+    if (instrumentChanged) {
+      instrumentRef.current = instrumentKey;
+      setSeries(null);
+    }
+
+    let cancelled = false;
+
+    async function fetchSeries(isPoll: boolean) {
+      setRefreshing(true);
+      if (!isPoll) {
         setError(null);
       }
 
@@ -64,39 +77,58 @@ export default function HomePage() {
           throw new Error(detail ?? body.error ?? "Failed to fetch market data");
         }
 
-        if (!isCancelled) {
+        if (!cancelled) {
           setSeries(json as PriceSeries);
         }
       } catch (caughtError) {
-        if (!isCancelled) {
+        if (!cancelled) {
           setError(caughtError instanceof Error ? caughtError.message : "Unexpected market data error");
         }
       } finally {
-        if (!isCancelled) {
-          setLoading(false);
+        if (!cancelled) {
+          setRefreshing(false);
         }
       }
     }
 
-    void fetchSeries();
+    void fetchSeries(false);
     const timer = window.setInterval(() => {
-      void fetchSeries();
+      void fetchSeries(true);
     }, REFRESH_MS[range]);
 
     return () => {
-      isCancelled = true;
+      cancelled = true;
       window.clearInterval(timer);
     };
-  }, [queryString, range]);
+  }, [queryString, selection, range]);
+
+  const onSearchSelect = (hit: SearchHit) => {
+    setSelection({
+      symbol: hit.symbol,
+      assetType: hit.assetType,
+      displayName: hit.name,
+      footnote: hit.footnote
+    });
+    setError(null);
+  };
+
+  const showChartLoading = Boolean(selection) && !series && !error;
 
   return (
     <main className="page-shell">
       <header className="hero">
-        <h1>Pulse Markets</h1>
-        <p>Track any product, service, or financial asset in an elegant real-time market graph.</p>
+        <div className="hero-top">
+          <div>
+            <h1>Pulse Markets</h1>
+            <p>One search for stocks, FX, crypto, futures, and popular “real world” proxies.</p>
+          </div>
+          <ThemeToggle />
+        </div>
       </header>
 
-      <section className="time-range-panel">
+      <MarketSearch onSelect={onSearchSelect} />
+
+      <section className="time-range-panel" aria-label="Time range">
         {(["1m", "5m", "15m", "1h", "1d"] as const).map((option) => (
           <button
             key={option}
@@ -109,9 +141,14 @@ export default function HomePage() {
         ))}
       </section>
 
-      <section className="dashboard-grid">
-        <AssetSelector options={ASSETS} selected={selectedAsset} onSelect={setSelectedAsset} />
-        <PriceChart series={series} loading={loading} error={error} />
+      <section className="dashboard-main">
+        <PriceChart
+          series={series}
+          loading={showChartLoading}
+          refreshing={refreshing}
+          error={error}
+          empty={!selection}
+        />
       </section>
     </main>
   );

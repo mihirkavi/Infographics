@@ -7,12 +7,28 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Pulse Markets | Real-Time Dashboard",
-  description: "Beautiful real-time market dashboard for stocks, forex, crypto, and commodities."
+  description: "Search stocks, FX, crypto, futures, and market proxies with live charts."
 };
+
+const themeInitScript = `
+(function() {
+  try {
+    var t = localStorage.getItem('infographics-theme');
+    if (t === 'light' || t === 'dark') {
+      document.documentElement.setAttribute('data-theme', t);
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  } catch (e) {}
+})();
+`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className={inter.className}>{children}</body>
     </html>
   );

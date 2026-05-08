@@ -4,12 +4,14 @@ import { Activity, Clock3, TrendingDown, TrendingUp } from "lucide-react";
 import { useId } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import type { PriceSeries } from "@/types/market";
+import type { AssetType, PriceSeries } from "@/types/market";
 
 interface PriceChartProps {
   series: PriceSeries | null;
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
+  empty: boolean;
 }
 
 function formatAxisTimestamp(timestamp: number): string {
@@ -34,7 +36,14 @@ function formatYAxisTick(value: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
-export function PriceChart({ series, loading, error }: PriceChartProps) {
+function formatPriceValue(price: number, assetType: AssetType): string {
+  if (assetType === "forex") {
+    return price.toLocaleString(undefined, { maximumFractionDigits: 5 });
+  }
+  return `$${price.toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
+}
+
+export function PriceChart({ series, loading, refreshing, error, empty }: PriceChartProps) {
   const gradientId = useId().replace(/:/g, "");
   const points = series?.points ?? [];
   const first = points[0]?.price ?? 0;
@@ -42,20 +51,22 @@ export function PriceChart({ series, loading, error }: PriceChartProps) {
   const delta = last - first;
   const deltaPct = first ? (delta / first) * 100 : 0;
   const positive = delta >= 0;
+  const title = series?.name ?? series?.symbol;
+  const assetType = series?.assetType ?? "stock";
 
   return (
-    <section className="panel chart-panel">
+    <section className={`panel chart-panel ${refreshing ? "chart-refreshing" : ""}`}>
       <div className="chart-header">
         <div>
-          <h2>Live market line chart</h2>
-          <p>Streaming updates with smooth redraw and validated timeseries.</p>
+          <h2>Live line chart</h2>
+          <p>Updates merge in place—no full-page flicker on each poll.</p>
         </div>
         <div className="chip-row">
           <span className="chip">
-            <Clock3 size={14} /> {series ? "Live" : "Waiting"}
+            <Clock3 size={14} /> {empty ? "Idle" : loading ? "Loading" : refreshing ? "Updating" : "Live"}
           </span>
           <span className="chip">
-            <Activity size={14} /> {series?.source ?? "provider"}
+            <Activity size={14} /> {series?.source ?? "—"}
           </span>
         </div>
       </div>
@@ -63,49 +74,60 @@ export function PriceChart({ series, loading, error }: PriceChartProps) {
       {series && (
         <div className="chart-metrics">
           <h3>
-            {series.symbol} <small>{series.assetType}</small>
+            {title} <small>{series.assetType}</small>
           </h3>
-          <p>${last.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+          <p className="chart-price">{formatPriceValue(last, series.assetType)}</p>
           <span className={positive ? "delta up" : "delta down"}>
             {positive ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-            {delta.toFixed(4)} ({deltaPct.toFixed(2)}%)
+            {series.assetType === "forex" ? delta.toFixed(5) : delta.toFixed(4)} ({deltaPct.toFixed(2)}%)
           </span>
+          {series.footnote ? <p className="chart-footnote">{series.footnote}</p> : null}
         </div>
       )}
 
-      {loading && <div className="state">Loading live prices...</div>}
+      {loading && <div className="state">Loading prices…</div>}
       {error && <div className="state error">{error}</div>}
-      {!loading && !error && !series && <div className="state">Select an asset to begin.</div>}
+      {empty && !loading && !error && <div className="state">Search for a company, car brand, crop future, or ticker to load a chart.</div>}
 
       {series && (
         <div className="chart-wrap">
-          <ResponsiveContainer width="100%" height={350}>
+          <ResponsiveContainer width="100%" height={360}>
             <AreaChart data={points}>
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#7c92ff" stopOpacity={0.45} />
-                  <stop offset="95%" stopColor="#7c92ff" stopOpacity={0.05} />
+                  <stop offset="5%" stopColor="var(--chart-fill-top)" stopOpacity={0.5} />
+                  <stop offset="95%" stopColor="var(--chart-fill-bottom)" stopOpacity={0.06} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2f3559" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis
                 dataKey="timestamp"
-                stroke="#9ba5d3"
+                stroke="var(--chart-axis)"
                 tickFormatter={formatAxisTimestamp}
                 tickMargin={10}
                 minTickGap={30}
               />
-              <YAxis
-                stroke="#9ba5d3"
-                domain={["auto", "auto"]}
-                tickFormatter={formatYAxisTick}
-              />
+              <YAxis stroke="var(--chart-axis)" domain={["auto", "auto"]} tickFormatter={formatYAxisTick} />
               <Tooltip
-                contentStyle={{ background: "#121833", border: "1px solid #313963", borderRadius: "12px" }}
+                contentStyle={{
+                  background: "var(--tooltip-bg)",
+                  border: "1px solid var(--tooltip-border)",
+                  borderRadius: "12px",
+                  color: "var(--text)"
+                }}
                 labelFormatter={(value) => formatTooltipTimestamp(Number(value))}
-                formatter={(value) => [`$${Number(value).toFixed(6)}`, "Price"]}
+                formatter={(value) => [formatPriceValue(Number(value), assetType), "Price"]}
               />
-              <Area type="monotone" dataKey="price" stroke="#9babff" strokeWidth={2} fillOpacity={1} fill={`url(#${gradientId})`} />
+              <Area
+                type="monotone"
+                dataKey="price"
+                stroke="var(--chart-line)"
+                strokeWidth={2}
+                fillOpacity={1}
+                fill={`url(#${gradientId})`}
+                isAnimationActive
+                animationDuration={420}
+              />
             </AreaChart>
           </ResponsiveContainer>
         </div>

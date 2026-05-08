@@ -4,9 +4,21 @@ import { z } from "zod";
 import { getPriceSeries } from "@/lib/marketData";
 
 const querySchema = z.object({
-  symbol: z.string().trim().min(1).max(30),
+  symbol: z.string().trim().min(1).max(36),
   assetType: z.enum(["stock", "forex", "crypto", "commodity"]),
-  range: z.enum(["1m", "5m", "15m", "1h", "1d"]).default("1h")
+  range: z.enum(["1m", "5m", "15m", "1h", "1d"]).default("1h"),
+  displayName: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
+  footnote: z
+    .string()
+    .trim()
+    .max(400)
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined))
 });
 
 export async function GET(request: NextRequest) {
@@ -15,7 +27,9 @@ export async function GET(request: NextRequest) {
     const parsed = querySchema.parse({
       symbol: searchParams.get("symbol"),
       assetType: searchParams.get("assetType"),
-      range: searchParams.get("range") ?? "1h"
+      range: searchParams.get("range") ?? "1h",
+      displayName: searchParams.get("displayName") ?? undefined,
+      footnote: searchParams.get("footnote") ?? undefined
     });
 
     const series = await getPriceSeries(parsed);

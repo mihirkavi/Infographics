@@ -33,6 +33,14 @@ const YAHOO_HEADERS = {
 
 type Provider = (query: PriceQuery) => Promise<PriceSeries>;
 
+function seriesLabels(query: PriceQuery): Pick<PriceSeries, "symbol" | "name" | "footnote"> {
+  return {
+    symbol: query.symbol,
+    name: query.displayName,
+    footnote: query.footnote
+  };
+}
+
 const providerByAsset: Record<AssetType, Provider> = {
   stock: fetchFromYahooChart,
   forex: fetchFromYahooChart,
@@ -52,7 +60,11 @@ function resolveYahooSymbol(query: PriceQuery): string {
   const raw = query.symbol.trim();
 
   if (query.assetType === "forex") {
-    const pair = raw.replace(/\s/g, "").replace(/\//g, "").toUpperCase();
+    const u = raw.replace(/\s/g, "").toUpperCase();
+    if (u.endsWith("=X")) {
+      return u;
+    }
+    const pair = u.replace(/\//g, "");
     if (pair.length < 6) {
       throw new Error(`Invalid forex pair: ${query.symbol}`);
     }
@@ -60,6 +72,10 @@ function resolveYahooSymbol(query: PriceQuery): string {
   }
 
   if (query.assetType === "commodity") {
+    const u = raw.trim().toUpperCase();
+    if (u.endsWith("=F")) {
+      return u;
+    }
     const key = raw.replace(/\s/g, "").toUpperCase();
     if (key === "XAU/USD" || key === "XAUUSD") {
       return "GC=F";
@@ -146,7 +162,7 @@ async function fetchFromYahooChart(query: PriceQuery): Promise<PriceSeries> {
   }
 
   return {
-    symbol: query.symbol,
+    ...seriesLabels(query),
     assetType: query.assetType,
     points: trimmed,
     lastUpdated: Date.now(),
@@ -168,7 +184,7 @@ async function fetchCryptoFromBinanceOrYahoo(query: PriceQuery): Promise<PriceSe
   const yahooSeries = await fetchFromYahooChart({ ...query, symbol: yahooPair, assetType: "stock" });
   return {
     ...yahooSeries,
-    symbol: query.symbol,
+    ...seriesLabels(query),
     assetType: "crypto",
     source: "yahoo-chart-v8"
   };
@@ -224,7 +240,7 @@ async function fetchFromBinance(query: PriceQuery, symbol: string): Promise<Pric
   }
 
   return {
-    symbol: query.symbol,
+    ...seriesLabels(query),
     assetType: query.assetType,
     points,
     lastUpdated: Date.now(),

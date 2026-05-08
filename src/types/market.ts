@@ -15,14 +15,20 @@ export interface PricePoint {
 
 export interface PriceSeries {
   symbol: string;
+  /** Friendly title from search (e.g. company or product context). */
+  name?: string;
   assetType: AssetType;
   points: PricePoint[];
   lastUpdated: number;
   source: string;
+  /** Clarifies proxy quotes (e.g. equity vs MSRP, futures vs retail). */
+  footnote?: string;
 }
 
 export interface PriceQuery {
   symbol: string;
   assetType: AssetType;
   range: TimeRange;
+  displayName?: string;
+  footnote?: string;
 }
