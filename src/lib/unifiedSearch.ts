@@ -198,6 +198,65 @@ function mergeSearchResults(yahoo: SearchHit[], gecko: SearchHit[], direct: Sear
   return dedupeHits(ordered);
 }
 
+const FALLBACK_FOOTNOTE =
+  "No Yahoo listing for that exact phrase—these are liquid, related instruments found via Yahoo search (not a retail price).";
+
+/**
+ * When the user types plain language (e.g. "tomatoes"), Yahoo returns zero quotes.
+ * We run additional Yahoo *search* queries (ETF names, sectors)—still no hardcoded symbol table,
+ * only discovery strings that Yahoo resolves to real tickers.
+ */
+function categoryDiscoveryQueries(userQuery: string): string[] {
+  const q = userQuery.toLowerCase().trim();
+  const out: string[] = [];
+
+  if (
+    /tomato|lettuce|potato|onion|carrot|banana|berry|pepper|garlic|broccoli|celery|spinach|kale|salad|greens|cucumber|mushroom|avocado|vegetable|produce|grocery|organic food|farmer|crop|harvest|orchard|egg\b|milk|dairy|butter|cheese\b|yogurt|beef|pork|chicken|turkey|lamb|wheat|corn|maize|oat|barley|rice\b|bean|lentil|pea\b|soy|coffee|sugar|cocoa|oil seed|palm oil|food(?!\s*$)/.test(
+      q
+    )
+  ) {
+    out.push(
+      "Invesco DB Agriculture Fund",
+      "agriculture ETF",
+      "DBA",
+      "Teucrium Corn Fund",
+      "Elements Agriculture Total Return",
+      "wheat ETF WEAT"
+    );
+  }
+
+  if (/iphone|ipad|airpod|smartphone|android phone|galaxy s|pixel phone|smart phone|handset/.test(q)) {
+    out.push("Apple Inc", "Samsung Electronics stock", "Alphabet Class A");
+  }
+
+  if (
+    /toyota|honda|ford\b|chevrolet|chevy|cadillac|gmc\b|tesla|bmw|mercedes|hyundai|kia|nissan|subaru|mazda|volkswagen|vw\b|audi|porsche|pickup|sedan|suv|vehicle|car\b|auto\b|automotive/.test(
+      q
+    )
+  ) {
+    out.push("Toyota Motor", "Ford Motor Company", "Tesla Inc", "Global X Autonomous Electric Vehicles ETF");
+  }
+
+  if (/gold\b|silver\b|copper\b|platinum|wti|brent|crude|oil\b|gasoline|natural gas|heating oil/.test(q)) {
+    out.push("SPDR Gold Shares", "silver futures", "WTI crude oil futures", "United States Oil Fund");
+  }
+
+  return [...new Set(out)].slice(0, 10);
+}
+
+async function discoverRelatedInstruments(userQuery: string): Promise<SearchHit[]> {
+  const queries = categoryDiscoveryQueries(userQuery);
+  if (!queries.length) {
+    return [];
+  }
+  const batches = await Promise.all(queries.map((phrase) => searchYahoo(phrase)));
+  return dedupeHits(batches.flat()).map((hit) => ({
+    ...hit,
+    footnote: hit.footnote ?? FALLBACK_FOOTNOTE,
+    kind: hit.kind === "UNKNOWN" ? "DISCOVERY" : hit.kind
+  }));
+}
+
 export async function unifiedSearch(rawQuery: string): Promise<SearchHit[]> {
   const query = rawQuery.trim();
   if (query.length < 1) {
@@ -208,5 +267,12 @@ export async function unifiedSearch(rawQuery: string): Promise<SearchHit[]> {
 
   const [yahooBroad, geckoHits] = await Promise.all([searchYahooBroad(query), searchCoinGecko(query)]);
 
-  return mergeSearchResults(yahooBroad, geckoHits, direct);
+  let merged = mergeSearchResults(yahooBroad, geckoHits, direct);
+
+  if (merged.length === 0) {
+    const discovered = await discoverRelatedInstruments(query);
+    merged = dedupeHits([...merged, ...discovered]);
+  }
+
+  return merged;
 }
