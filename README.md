@@ -63,3 +63,7 @@ git push -u origin main
 - **Forex** symbols often look like `EURUSD=X` on Yahoo.
 - **Futures** use Yahoo suffix `=F`; **crypto** pairs often `COIN-USD`.
 - **Crypto** chart uses Binance when the pair maps to `*USDT`; otherwise Yahoo `*-USD` style data.
+
+## License
+
+[GNU General Public License v3.0](LICENSE).
