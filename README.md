@@ -1,5 +1,7 @@
 # Infographics — Pulse Markets Dashboard
 
+<p><img src="assets/brand/logo.png" alt="Infographics logo" width="96" height="96"></p>
+
 **Project / repository:** `Infographics` (workspace folder and canonical project name). The npm package name is `infographics` (lowercase, per npm rules).
 
 A real-time market dashboard built with Next.js that supports:
@@ -67,3 +69,11 @@ git push -u origin main
 ## License
 
 [GNU General Public License v3.0](LICENSE).
+
+<!-- project-artwork:start -->
+## Project artwork
+
+![Conceptual artwork for Infographics](assets/brand/cover.png)
+
+Conceptual project artwork. [Asset files, design notes, and generation prompts](assets/brand/README.md).
+<!-- project-artwork:end -->
