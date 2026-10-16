@@ -45,14 +45,34 @@ Open `http://localhost:3000`.
 
 No API keys are required for the default Yahoo + Binance pipeline.
 
-## Git
+## Tech stack
 
-Remote: `https://github.com/mihirkavi/Infographics.git`
+Next.js 16 (App Router), React 19, TypeScript, Recharts for charts, Zod for API input validation, lucide-react icons.
 
-```bash
-git remote add origin https://github.com/mihirkavi/Infographics.git
-git push -u origin main
+## Project structure
+
+```text
+src/
+  app/
+    page.tsx              Dashboard page
+    api/prices/route.ts   GET /api/prices?symbol=&assetType=&range=  (price series)
+    api/search/route.ts   GET /api/search?q=  (symbol search)
+  components/             MarketSearch, PriceChart, ThemeToggle
+  lib/marketData.ts       Yahoo Finance and Binance fetching
+  lib/unifiedSearch.ts    Yahoo Finance and CoinGecko search
+  types/                  Shared types
 ```
+
+`assetType` is one of `stock`, `forex`, `crypto`, `commodity`; `range` is one of `1m`, `5m`, `15m`, `1h`, `1d` (default `1h`).
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start the development server |
+| `npm run build` | Production build |
+| `npm start` | Serve the production build |
+| `npm run lint` | Run ESLint |
 
 ## Search behavior
 
