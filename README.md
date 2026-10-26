@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.png">
-    <img alt="Pulse Markets: every market, one search. Live charts for stocks, forex, crypto and futures with no API keys and no sign-up." src=".github/assets/banner-light.png" width="100%">
+    <img alt="Pulse Markets: every market, one search. A search box for Apple, gold, EUR/USD and Bitcoin above an illustrative teal live chart, with asset-class tags for stocks, ETFs, forex, futures and crypto." src=".github/assets/banner-light.png" width="100%">
   </picture>
 </p>
 
@@ -18,10 +18,10 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-111111?style=flat-square"></a>
-  <img alt="Stack: Next.js 16 and React 19" src="https://img.shields.io/badge/Next.js%2016%20%C2%B7%20React%2019-111111?style=flat-square">
-  <img alt="No API keys" src="https://img.shields.io/badge/API%20keys-none-111111?style=flat-square">
-  <img alt="Status: personal project" src="https://img.shields.io/badge/status-personal%20project-6b6b6b?style=flat-square">
+  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-0f172a?style=flat-square"></a>
+  <img alt="Stack: Next.js 16 and React 19" src="https://img.shields.io/badge/Next.js%2016%20%C2%B7%20React%2019-0d9488?style=flat-square">
+  <img alt="No API keys" src="https://img.shields.io/badge/API%20keys-none-0d9488?style=flat-square">
+  <img alt="Status: personal project" src="https://img.shields.io/badge/status-personal%20project-64748b?style=flat-square">
 </p>
 
 <p align="center">
@@ -37,15 +37,15 @@ Checking one price usually means knowing the exact ticker, picking the right sit
 <table>
   <tr>
     <td width="33%" valign="top">
-      <h3>🔎 One search for everything</h3>
+      <h3>One search for everything</h3>
       Stocks, ETFs, forex pairs, futures and crypto in one list, matched from plain words or tickers through Yahoo Finance and CoinGecko search.
     </td>
     <td width="33%" valign="top">
-      <h3>📈 Charts that stay live</h3>
+      <h3>Charts that stay live</h3>
       Five ranges from <code>1m</code> to <code>1d</code>. The chart refreshes every 4 to 20 seconds and updates in place, without a full-page flicker.
     </td>
     <td width="33%" valign="top">
-      <h3>🔑 Zero setup</h3>
+      <h3>Zero setup</h3>
       No API keys, no account, no database. <code>npm install</code>, <code>npm run dev</code>, and you are charting.
     </td>
   </tr>
